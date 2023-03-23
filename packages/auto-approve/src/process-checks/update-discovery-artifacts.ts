@@ -12,92 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {LanguageRule, File, Process} from '../interfaces';
-import {
-  checkAuthor,
-  checkTitleOrBody,
-  checkFilePathsMatch,
-  reportIndividualChecks,
-} from '../utils-for-pr-checking';
 import {Octokit} from '@octokit/rest';
+import {BaseLanguageRule} from './base';
+import {TitleCheck} from '../checks/title-check';
+import {AuthorCheck} from '../checks/author-check';
+import {AllowedFilesCheck} from '../checks/allowed-files-check';
 
-export class UpdateDiscoveryArtifacts extends Process implements LanguageRule {
-  classRule: {
-    author: string;
-    titleRegex?: RegExp;
-    fileNameRegex?: RegExp[];
-    fileRules?: [
-      {
-        oldVersion?: RegExp;
-        newVersion?: RegExp;
-        dependencyTitle?: RegExp;
-        targetFileToCheck: RegExp;
-      }
-    ];
-  };
-
-  constructor(
-    incomingPrAuthor: string,
-    incomingTitle: string,
-    incomingFileCount: number,
-    incomingChangedFiles: File[],
-    incomingRepoName: string,
-    incomingRepoOwner: string,
-    incomingPrNumber: number,
-    incomingOctokit: Octokit,
-    incomingBody?: string
-  ) {
-    super(
-      incomingPrAuthor,
-      incomingTitle,
-      incomingFileCount,
-      incomingChangedFiles,
-      incomingRepoName,
-      incomingRepoOwner,
-      incomingPrNumber,
-      incomingOctokit,
-      incomingBody
-    ),
-      (this.classRule = {
-        author: 'yoshi-code-bot',
-        titleRegex: /^chore: Update discovery artifacts/,
-        fileNameRegex: [
-          /^docs\/dyn\/index\.md$/,
-          /^docs\/dyn\/.*\.html$/,
-          /^googleapiclient\/discovery_cache\/documents\/.*\.json$/,
-        ],
-      });
-  }
-
-  public async checkPR(): Promise<boolean> {
-    const authorshipMatches = checkAuthor(
-      this.classRule.author,
-      this.incomingPR.author
+export class UpdateDiscoveryArtifacts extends BaseLanguageRule {
+  constructor(octokit: Octokit) {
+    super(octokit);
+    this.rules.concat(new TitleCheck(/^chore: Update discovery artifacts/));
+    this.rules.concat(new AuthorCheck('yoshi-code-body'));
+    this.rules.concat(
+      new AllowedFilesCheck(
+        /^docs\/dyn\/index\.md$/,
+        /^docs\/dyn\/.*\.html$/,
+        /^googleapiclient\/discovery_cache\/documents\/.*\.json$/
+      )
     );
-
-    const titleMatches = checkTitleOrBody(
-      this.incomingPR.title,
-      this.classRule.titleRegex
-    );
-
-    const filePatternsMatch = checkFilePathsMatch(
-      this.incomingPR.changedFiles.map(x => x.filename),
-      this.classRule.fileNameRegex
-    );
-
-    reportIndividualChecks(
-      [
-        'authorshipMatches',
-        'titleMatches',
-        'fileCountMatches',
-        'filePatternsMatch',
-      ],
-      [authorshipMatches, titleMatches, filePatternsMatch],
-      this.incomingPR.repoOwner,
-      this.incomingPR.repoName,
-      this.incomingPR.prNumber
-    );
-
-    return authorshipMatches && titleMatches && filePatternsMatch;
   }
 }

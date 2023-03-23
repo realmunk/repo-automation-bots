@@ -65,32 +65,24 @@ export interface FileAndMetadata {
   fileRule: FileSpecificRule;
 }
 
+export interface PullRequest {
+  author: string;
+  title: string;
+  fileCount: number;
+  changedFiles: File[];
+  repoName: string;
+  repoOwner: string;
+  prNumber: number;
+  body?: string;
+}
+
 /**
  * Class interface for language-specific rules. These methods ensure that a given language
  * provides a process for deciding whether a release-type, dependency-type pr passes language-specific additional
  * checks, and then overall confirms if that PR passes additional checks for its given language.
  */
 export interface LanguageRule {
-  checkPR(): Promise<boolean>;
-  incomingPR: {
-    author: string;
-    title: string;
-    fileCount: number;
-    changedFiles: File[];
-    repoName: string;
-    repoOwner: string;
-    prNumber: number;
-    body?: string;
-  };
-  classRule: {
-    author: string;
-    titleRegex?: RegExp;
-    titleRegexExclude?: RegExp;
-    fileNameRegex?: RegExp[];
-    maxFiles?: number;
-    fileRules?: FileRule[];
-    bodyRegex?: RegExp;
-  };
+  checkPR(pullRequest: PullRequest): Promise<boolean>;
   octokit: Octokit;
 }
 
@@ -153,40 +145,20 @@ export interface ConfigurationV2 {
   processes: string[];
 }
 
+export interface CheckResult {
+  name: string;
+  status: boolean;
+  scope?: string;
+}
+export interface CheckRule {
+  checkPR(pullRequest: PullRequest): Promise<CheckResult[]>
+}
 export abstract class Process {
-  incomingPR: {
-    author: string;
-    title: string;
-    fileCount: number;
-    changedFiles: File[];
-    repoName: string;
-    repoOwner: string;
-    prNumber: number;
-    body?: string;
-  };
   octokit: Octokit;
 
   constructor(
-    incomingPrAuthor: string,
-    incomingTitle: string,
-    incomingFileCount: number,
-    incomingChangedFiles: File[],
-    incomingRepoName: string,
-    incomingRepoOwner: string,
-    incomingPrNumber: number,
-    incomingOctokit: Octokit,
-    incomingBody?: string
+    octokit: Octokit
   ) {
-    this.incomingPR = {
-      author: incomingPrAuthor,
-      title: incomingTitle,
-      fileCount: incomingFileCount,
-      changedFiles: incomingChangedFiles,
-      repoName: incomingRepoName,
-      repoOwner: incomingRepoOwner,
-      prNumber: incomingPrNumber,
-      body: incomingBody,
-    };
-    this.octokit = incomingOctokit;
+    this.octokit = octokit;
   }
 }

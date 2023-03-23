@@ -12,137 +12,56 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {LanguageRule, File, Process} from '../interfaces';
-import {
-  checkAuthor,
-  checkTitleOrBody,
-  reportIndividualChecks,
-  getOpenPRsInRepoFromSameAuthor,
-} from '../utils-for-pr-checking';
-import {getFileContent, listCommitsOnAPR} from '../get-pr-info';
+import {PullRequest, CheckResult} from '../interfaces';
+import {getOpenPRsInRepoFromSameAuthor} from '../utils-for-pr-checking';
+import {listCommitsOnAPR} from '../get-pr-info';
 import {Octokit} from '@octokit/rest';
+import {BaseLanguageRule} from './base';
+import {TitleCheck} from '../checks/title-check';
+import {AuthorCheck} from '../checks/author-check';
+import {BodyCheck} from '../checks/body-check';
+import {LibraryTypeCheck} from '../checks/library-type-check';
 
-export class OwlBotAPIChanges extends Process implements LanguageRule {
-  classRule: {
-    author: string;
-    titleRegex?: RegExp;
-    bodyRegex?: RegExp;
-  };
+const ALLOWED_AUTHOR = 'gcf-owl-bot[bot]';
 
-  constructor(
-    incomingPrAuthor: string,
-    incomingTitle: string,
-    incomingFileCount: number,
-    incomingChangedFiles: File[],
-    incomingRepoName: string,
-    incomingRepoOwner: string,
-    incomingPrNumber: number,
-    incomingOctokit: Octokit,
-    incomingBody?: string
-  ) {
-    super(
-      incomingPrAuthor,
-      incomingTitle,
-      incomingFileCount,
-      incomingChangedFiles,
-      incomingRepoName,
-      incomingRepoOwner,
-      incomingPrNumber,
-      incomingOctokit,
-      incomingBody
-    ),
-      (this.classRule = {
-        author: 'gcf-owl-bot[bot]',
-        titleRegex: /(breaking|BREAKING|!)/,
-        bodyRegex: /PiperOrigin-RevId/,
-      });
+export class OwlBotAPIChanges extends BaseLanguageRule {
+  constructor(octokit: Octokit) {
+    super(octokit);
+    this.rules.concat(new TitleCheck(/(breaking|BREAKING|!)/, true));
+    this.rules.concat(new AuthorCheck(ALLOWED_AUTHOR));
+    this.rules.concat(new BodyCheck(/PiperOrigin-RevId/));
+    this.rules.concat(new LibraryTypeCheck(octokit, 'GAPIC_AUTO'));
   }
 
-  public async checkPR(): Promise<boolean> {
-    const authorshipMatches = checkAuthor(
-      this.classRule.author,
-      this.incomingPR.author
-    );
-
-    const titleMatches = checkTitleOrBody(
-      this.incomingPR.title,
-      this.classRule.titleRegex
-    );
-
-    let bodyMatches = true;
-    if (this.incomingPR.body) {
-      bodyMatches = checkTitleOrBody(
-        this.incomingPR.body,
-        this.classRule.bodyRegex
-      );
-    }
-
-    const fileContent = await getFileContent(
-      this.incomingPR.repoOwner,
-      this.incomingPR.repoName,
-      '.repo-metadata.json',
-      this.octokit
-    );
-
-    const isGAPIC = JSON.parse(fileContent).library_type === 'GAPIC_AUTO';
+  public async additionalChecks(
+    incomingPR: PullRequest
+  ): Promise<CheckResult[]> {
+    const checkResults: CheckResult[] = [];
 
     const openOwlBotPRs = await getOpenPRsInRepoFromSameAuthor(
-      this.incomingPR.repoOwner,
-      this.incomingPR.repoName,
-      this.incomingPR.author,
+      incomingPR.repoOwner,
+      incomingPR.repoName,
+      incomingPR.author,
       this.octokit
     );
-
-    let otherOwlBotPRs = false;
-    if (openOwlBotPRs > 1) {
-      otherOwlBotPRs = true;
-    }
+    checkResults.concat({
+      name: 'areThereOtherOwlBotPRs',
+      status: openOwlBotPRs === 0,
+    });
 
     const commitsOnPR = await listCommitsOnAPR(
-      this.incomingPR.repoOwner,
-      this.incomingPR.repoName,
-      this.incomingPR.prNumber,
+      incomingPR.repoOwner,
+      incomingPR.repoName,
+      incomingPR.prNumber,
       this.octokit
     );
-
-    const commitAuthors = commitsOnPR.filter(
-      x => x.author?.login !== this.classRule.author
+    const otherCommitAuthors = commitsOnPR.filter(
+      x => x.author?.login !== ALLOWED_AUTHOR
     );
-    let otherCommitAuthors = false;
-    if (commitAuthors.length > 0) {
-      otherCommitAuthors = true;
-    }
-
-    reportIndividualChecks(
-      [
-        'authorshipMatches',
-        'titleMatches',
-        'bodyMatches',
-        'isGAPIC',
-        'areThereOtherOwlBotPRs',
-        'areThereOtherCommitAuthors',
-      ],
-      [
-        authorshipMatches,
-        !titleMatches,
-        bodyMatches,
-        isGAPIC,
-        !otherOwlBotPRs,
-        !otherCommitAuthors,
-      ],
-      this.incomingPR.repoOwner,
-      this.incomingPR.repoName,
-      this.incomingPR.prNumber
-    );
-
-    // We are looking for an antipattern, i.e., if title does not include BREAKING, and if there are no other owlbot PRs and no other authors made commits on the PR
-    return (
-      authorshipMatches &&
-      !titleMatches &&
-      bodyMatches &&
-      isGAPIC &&
-      !otherOwlBotPRs &&
-      !otherCommitAuthors
-    );
+    checkResults.concat({
+      name: 'areThereOtherCommitAuthors',
+      status: otherCommitAuthors.length === 0,
+    });
+    return checkResults;
   }
 }

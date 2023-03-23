@@ -16,7 +16,7 @@
 import {PullRequestEvent} from '@octokit/webhooks-types/schema';
 import {getChangedFiles} from './get-pr-info';
 import {Octokit} from '@octokit/rest';
-import {ConfigurationV2} from './interfaces';
+import {ConfigurationV2, PullRequest} from './interfaces';
 import {UpdateDiscoveryArtifacts} from './process-checks/update-discovery-artifacts';
 import {RegenerateReadme} from './process-checks/regenerate-readme';
 import {DiscoveryDocUpdate} from './process-checks/discovery-doc-update';
@@ -29,6 +29,7 @@ import {OwlBotAPIChanges} from './process-checks/owl-bot-api-changes';
 import {JavaApiaryCodegen} from './process-checks/java/apiary-codegen';
 import {PHPApiaryCodegen} from './process-checks/php/apiary-codegen';
 import {logger as defaultLogger, GCFLogger} from 'gcf-utils';
+import {BaseLanguageRule} from './process-checks/base';
 // This file manages the logic to check whether a given PR matches the config in the repository
 
 // We need this typeMap to convert the JSON input (string) into a corresponding type.
@@ -78,6 +79,14 @@ const typeMap = [
     configType: PHPApiaryCodegen,
   },
 ];
+type LanguageRuleType = typeof BaseLanguageRule;
+const configTypesByName: Map<string, LanguageRuleType> = typeMap.reduce(
+  (collection, entry) => {
+    collection.set(entry.configValue, entry.configType);
+    return collection;
+  },
+  new Map()
+);
 
 /**
  * Checks that a given PR matches the rules in the auto-approve.yml file in the repository
@@ -117,30 +126,22 @@ export async function checkPRAgainstConfigV2(
     return false;
   }
 
-  for (const rule of config.processes) {
-    const Rule = typeMap.find(x => x.configValue === rule);
-    // We can assert we'll find a match, since the config has already passed
-    // a check that it corresponds to one of the processes
-    const instantiatedRule = new Rule!.configType(
-      prAuthor,
-      title,
-      fileCount,
-      changedFiles,
-      repo,
-      repoOwner,
-      prNumber,
-      octokit,
-      body ?? undefined
-    );
+  const incomingPullRequest: PullRequest = {
+    author: prAuthor,
+    title,
+    fileCount,
+    changedFiles,
+    repoName: repo,
+    repoOwner,
+    prNumber,
+    body: body || undefined,
+  };
 
-    const passed = await instantiatedRule.checkPR();
-
-    // Stop early if the PR passes for one of the cases allowed by the config
-    if (passed === true) {
-      return true;
-    }
-  }
-
-  // If no match, return false;
-  return false;
+  const results = await Promise.all(
+    config.processes
+      .map(type => configTypesByName.get(type))
+      .filter(Boolean)
+      .map(type => new type!(octokit).checkPR(incomingPullRequest))
+  );
+  return !!results.find(Boolean);
 }

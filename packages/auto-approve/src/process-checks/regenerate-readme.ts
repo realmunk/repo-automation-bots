@@ -12,101 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {LanguageRule, File, Process} from '../interfaces';
-import {
-  checkAuthor,
-  checkTitleOrBody,
-  checkFileCount,
-  checkFilePathsMatch,
-  reportIndividualChecks,
-} from '../utils-for-pr-checking';
 import {Octokit} from '@octokit/rest';
+import {BaseLanguageRule} from './base';
+import {TitleCheck} from '../checks/title-check';
+import {AuthorCheck} from '../checks/author-check';
+import {MaxFilesCheck} from '../checks/max-files-check';
+import {AllowedFilesCheck} from '../checks/allowed-files-check';
 
-export class RegenerateReadme extends Process implements LanguageRule {
-  classRule: {
-    author: string;
-    titleRegex?: RegExp;
-    maxFiles: number;
-    fileNameRegex?: RegExp[];
-    fileRules?: [
-      {
-        oldVersion?: RegExp;
-        newVersion?: RegExp;
-        dependencyTitle?: RegExp;
-        targetFileToCheck: RegExp;
-      }
-    ];
-  };
-
-  constructor(
-    incomingPrAuthor: string,
-    incomingTitle: string,
-    incomingFileCount: number,
-    incomingChangedFiles: File[],
-    incomingRepoName: string,
-    incomingRepoOwner: string,
-    incomingPrNumber: number,
-    incomingOctokit: Octokit,
-    incomingBody?: string
-  ) {
-    super(
-      incomingPrAuthor,
-      incomingTitle,
-      incomingFileCount,
-      incomingChangedFiles,
-      incomingRepoName,
-      incomingRepoOwner,
-      incomingPrNumber,
-      incomingOctokit,
-      incomingBody
-    ),
-      (this.classRule = {
-        author: 'yoshi-automation',
-        titleRegex: /^chore: regenerate README$/,
-        maxFiles: 2,
-        fileNameRegex: [
-          /^README.md$/,
-          /\.github\/readme\/synth.metadata\/synth\.metadata$/,
-        ],
-      });
-  }
-
-  public async checkPR(): Promise<boolean> {
-    const authorshipMatches = checkAuthor(
-      this.classRule.author,
-      this.incomingPR.author
-    );
-
-    const titleMatches = checkTitleOrBody(
-      this.incomingPR.title,
-      this.classRule.titleRegex
-    );
-
-    const fileCountMatch = checkFileCount(
-      this.incomingPR.fileCount,
-      this.classRule.maxFiles
-    );
-
-    const filePatternsMatch = checkFilePathsMatch(
-      this.incomingPR.changedFiles.map(x => x.filename),
-      this.classRule.fileNameRegex
-    );
-
-    reportIndividualChecks(
-      [
-        'authorshipMatches',
-        'titleMatches',
-        'fileCountMatches',
-        'filePatternsMatch',
-      ],
-      [authorshipMatches, titleMatches, fileCountMatch, filePatternsMatch],
-      this.incomingPR.repoOwner,
-      this.incomingPR.repoName,
-      this.incomingPR.prNumber
-    );
-
-    return (
-      authorshipMatches && titleMatches && fileCountMatch && filePatternsMatch
+export class RegenerateReadme extends BaseLanguageRule {
+  constructor(octokit: Octokit) {
+    super(octokit);
+    this.rules.concat(new TitleCheck(/^chore: regenerate README$/));
+    this.rules.concat(new AuthorCheck('yoshi-automation'));
+    this.rules.concat(new MaxFilesCheck(2));
+    this.rules.concat(
+      new AllowedFilesCheck(
+        /^README.md$/,
+        /\.github\/readme\/synth.metadata\/synth\.metadata$/
+      )
     );
   }
 }

@@ -12,97 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {LanguageRule, File, Process} from '../interfaces';
-import {
-  checkAuthor,
-  checkTitleOrBody,
-  reportIndividualChecks,
-} from '../utils-for-pr-checking';
-import {getFileContent} from '../get-pr-info';
 import {Octokit} from '@octokit/rest';
+import {BaseLanguageRule} from './base';
+import {TitleCheck} from '../checks/title-check';
+import {AuthorCheck} from '../checks/author-check';
+import {BodyCheck} from '../checks/body-check';
+import {LibraryTypeCheck} from '../checks/library-type-check';
 
-export class OwlBotTemplateChanges extends Process implements LanguageRule {
-  classRule: {
-    author: string;
-    titleRegex: RegExp;
-    titleRegexExclude: RegExp;
-    bodyRegex?: RegExp;
-  };
-
-  constructor(
-    incomingPrAuthor: string,
-    incomingTitle: string,
-    incomingFileCount: number,
-    incomingChangedFiles: File[],
-    incomingRepoName: string,
-    incomingRepoOwner: string,
-    incomingPrNumber: number,
-    incomingOctokit: Octokit,
-    incomingBody?: string
-  ) {
-    super(
-      incomingPrAuthor,
-      incomingTitle,
-      incomingFileCount,
-      incomingChangedFiles,
-      incomingRepoName,
-      incomingRepoOwner,
-      incomingPrNumber,
-      incomingOctokit,
-      incomingBody
-    ),
-      (this.classRule = {
-        author: 'gcf-owl-bot[bot]',
-        // For this particular rule, we want to check a pattern and an antipattern;
-        // we want fix/feat/! to not be in the title, and we do want [autoapprove] to
-        // be in the title
-        titleRegex: /\[autoapprove\]/,
-        titleRegexExclude: /(fix|feat|!)/,
-        bodyRegex: /PiperOrigin-RevId/,
-      });
-  }
-
-  public async checkPR(): Promise<boolean> {
-    const authorshipMatches = checkAuthor(
-      this.classRule.author,
-      this.incomingPR.author
-    );
-
-    const titleMatches =
-      // We don't want it to include fix, feat, or !
-      !checkTitleOrBody(
-        this.incomingPR.title,
-        this.classRule.titleRegexExclude
-      ) &&
-      // We do want it to include [autoapprove] in title
-      checkTitleOrBody(this.incomingPR.title, this.classRule.titleRegex);
-
-    let bodyMatches = true;
-    if (this.incomingPR.body) {
-      bodyMatches = checkTitleOrBody(
-        this.incomingPR.body,
-        this.classRule.bodyRegex
-      );
-    }
-
-    const fileContent = await getFileContent(
-      this.incomingPR.repoOwner,
-      this.incomingPR.repoName,
-      '.repo-metadata.json',
-      this.octokit
-    );
-
-    const isGAPIC = JSON.parse(fileContent).library_type === 'GAPIC_AUTO';
-
-    reportIndividualChecks(
-      ['authorshipMatches', 'titleMatches', 'bodyMatches', 'isGAPIC'],
-      [authorshipMatches, titleMatches, !bodyMatches, isGAPIC],
-      this.incomingPR.repoOwner,
-      this.incomingPR.repoName,
-      this.incomingPR.prNumber
-    );
-
-    // We are looking for an antipattern, i.e., if title does not include fix or feat, and if body dodes not include PiperOrigin
-    return authorshipMatches && titleMatches && !bodyMatches && isGAPIC;
+export class OwlBotTemplateChanges extends BaseLanguageRule {
+  constructor(octokit: Octokit) {
+    super(octokit);
+    this.rules.concat(new TitleCheck(/\[autoapprove\]/));
+    this.rules.concat(new TitleCheck(/(fix|feat|!)/, true));
+    this.rules.concat(new AuthorCheck('gcf-owl-bot[bot]'));
+    this.rules.concat(new BodyCheck(/PiperOrigin-RevId/));
+    this.rules.concat(new LibraryTypeCheck(octokit, 'GAPIC_AUTO'));
   }
 }

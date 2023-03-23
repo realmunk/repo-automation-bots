@@ -12,105 +12,65 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {LanguageRule, File, Process} from '../../interfaces';
 import {
-  checkAuthor,
-  checkTitleOrBody,
-  checkFileCount,
-  checkFilePathsMatch,
+  File,
+  PullRequest,
+  FileRule,
+  CheckResult,
+} from '../../interfaces';
+import {
   getVersionsV2,
   runVersioningValidation,
   isOneDependencyChanged,
   mergesOnWeekday,
-  reportIndividualChecks,
 } from '../../utils-for-pr-checking';
 import {Octokit} from '@octokit/rest';
+import {BaseLanguageRule} from '../base';
+import {TitleCheck} from '../../checks/title-check';
+import {AuthorCheck} from '../../checks/author-check';
+import {MaxFilesCheck} from '../../checks/max-files-check';
+import {AllowedFilesCheck} from '../../checks/allowed-files-check';
 
-export class NodeRelease extends Process implements LanguageRule {
-  classRule: {
-    author: string;
-    titleRegex?: RegExp;
-    maxFiles: number;
-    fileNameRegex?: RegExp[];
-    fileRules?: {
-      oldVersion?: RegExp;
-      newVersion?: RegExp;
-      dependencyTitle?: RegExp;
-      targetFileToCheck: RegExp;
-    }[];
-  };
-
-  constructor(
-    incomingPrAuthor: string,
-    incomingTitle: string,
-    incomingFileCount: number,
-    incomingChangedFiles: File[],
-    incomingRepoName: string,
-    incomingRepoOwner: string,
-    incomingPrNumber: number,
-    incomingOctokit: Octokit,
-    incomingBody?: string
-  ) {
-    super(
-      incomingPrAuthor,
-      incomingTitle,
-      incomingFileCount,
-      incomingChangedFiles,
-      incomingRepoName,
-      incomingRepoOwner,
-      incomingPrNumber,
-      incomingOctokit,
-      incomingBody
-    ),
-      (this.classRule = {
-        author: 'release-please',
-        titleRegex: /^chore: release/,
-        maxFiles: 2,
-        fileNameRegex: [/^package.json$/, /^CHANGELOG.md$/],
-        fileRules: [
-          {
-            targetFileToCheck: /^package.json$/,
-            // This would match: -  "version": "2.3.0"
-            oldVersion: new RegExp(
-              /-[\s]*"(@?\S*)":[\s]"([0-9]*)*\.([0-9]*\.[0-9]*)",/
-            ),
-            // This would match: +  "version": "2.3.0"
-            newVersion: new RegExp(
-              /\+[\s]*"(@?\S*)":[\s]"([0-9]*)*\.([0-9]*\.[0-9]*)",/
-            ),
-          },
-        ],
-      });
+export class NodeRelease extends BaseLanguageRule {
+  fileRules: FileRule[] = [
+    {
+      targetFileToCheck: /^package.json$/,
+      // This would match: -  "version": "2.3.0"
+      oldVersion: new RegExp(
+        /-[\s]*"(@?\S*)":[\s]"([0-9]*)*\.([0-9]*\.[0-9]*)",/
+      ),
+      // This would match: +  "version": "2.3.0"
+      newVersion: new RegExp(
+        /\+[\s]*"(@?\S*)":[\s]"([0-9]*)*\.([0-9]*\.[0-9]*)",/
+      ),
+    },
+  ];
+  constructor(octokit: Octokit) {
+    super(octokit);
+    this.rules.concat(new TitleCheck(/^chore: release/));
+    this.rules.concat(new AuthorCheck('release-please'));
+    this.rules.concat(new MaxFilesCheck(2));
+    this.rules.concat(
+      new AllowedFilesCheck(/^package.json$/, /^CHANGELOG.md$/)
+    );
   }
 
-  public async checkPR(): Promise<boolean> {
-    const authorshipMatches = checkAuthor(
-      this.classRule.author,
-      this.incomingPR.author
-    );
+  public async additionalChecks(
+    pullRequest: PullRequest
+  ): Promise<CheckResult[]> {
+    const checkResults: CheckResult[] = [];
+    checkResults.concat({
+      name: 'isMergedOnWeekDay',
+      status: mergesOnWeekday(),
+    });
 
-    const titleMatches = checkTitleOrBody(
-      this.incomingPR.title,
-      this.classRule.titleRegex
-    );
-
-    const fileCountMatch = checkFileCount(
-      this.incomingPR.fileCount,
-      this.classRule.maxFiles
-    );
-
-    const filePatternsMatch = checkFilePathsMatch(
-      this.incomingPR.changedFiles.map(x => x.filename),
-      this.classRule.fileNameRegex
-    );
-
-    for (const fileRule of this.classRule.fileRules!) {
-      const fileMatch = this.incomingPR.changedFiles?.find((x: File) =>
+    for (const fileRule of this.fileRules) {
+      const fileMatch = pullRequest.changedFiles?.find((x: File) =>
         fileRule.targetFileToCheck.test(x.filename)
       );
 
       if (!fileMatch) {
-        return false;
+        continue;
       }
 
       const versions = getVersionsV2(
@@ -120,43 +80,21 @@ export class NodeRelease extends Process implements LanguageRule {
       );
 
       if (!versions) {
-        return false;
+        continue;
       }
 
-      const isVersionValid = runVersioningValidation(versions);
+      checkResults.concat({
+        name: 'isVersionValid',
+        status: runVersioningValidation(versions),
+        scope: fileMatch.filename,
+      });
 
-      const oneDependencyChanged = isOneDependencyChanged(fileMatch);
-
-      const isMergedOnWeekDay = mergesOnWeekday();
-
-      if (!(isMergedOnWeekDay && isVersionValid && oneDependencyChanged)) {
-        reportIndividualChecks(
-          ['isMergedOnWeekDay', 'isVersionValid', 'oneDependencyChanged'],
-          [isMergedOnWeekDay, isVersionValid, oneDependencyChanged],
-          this.incomingPR.repoOwner,
-          this.incomingPR.repoName,
-          this.incomingPR.prNumber,
-          fileMatch.filename
-        );
-        return false;
-      }
+      checkResults.concat({
+        name: 'oneDependencyChanged',
+        status: isOneDependencyChanged(fileMatch),
+        scope: fileMatch.filename,
+      });
     }
-
-    reportIndividualChecks(
-      [
-        'authorshipMatches',
-        'titleMatches',
-        'fileCountMatches',
-        'filePatternsMatch',
-      ],
-      [authorshipMatches, titleMatches, fileCountMatch, filePatternsMatch],
-      this.incomingPR.repoOwner,
-      this.incomingPR.repoName,
-      this.incomingPR.prNumber
-    );
-
-    return (
-      authorshipMatches && titleMatches && fileCountMatch && filePatternsMatch
-    );
+    return checkResults;
   }
 }

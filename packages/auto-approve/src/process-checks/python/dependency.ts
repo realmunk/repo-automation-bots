@@ -12,110 +12,58 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {LanguageRule, File, FileRule, Process} from '../../interfaces';
+import {FileRule, PullRequest, CheckResult} from '../../interfaces';
 import {
-  checkAuthor,
-  checkTitleOrBody,
-  checkFileCount,
-  checkFilePathsMatch,
   doesDependencyChangeMatchPRTitleV2,
   getVersionsV2,
   runVersioningValidation,
   isOneDependencyChanged,
-  reportIndividualChecks,
 } from '../../utils-for-pr-checking';
 import {Octokit} from '@octokit/rest';
+import {BaseLanguageRule} from '../base';
+import {TitleCheck} from '../../checks/title-check';
+import {AuthorCheck} from '../../checks/author-check';
+import {MaxFilesCheck} from '../../checks/max-files-check';
+import {AllowedFilesCheck} from '../../checks/allowed-files-check';
 
-export class PythonDependency extends Process implements LanguageRule {
-  classRule: {
-    author: string;
-    titleRegex?: RegExp;
-    maxFiles: number;
-    fileNameRegex?: RegExp[];
-    fileRules?: {
-      oldVersion?: RegExp;
-      newVersion?: RegExp;
-      dependencyTitle?: RegExp;
-      targetFileToCheck: RegExp;
-    }[];
-  };
+export class PythonDependency extends BaseLanguageRule {
+  fileRules: FileRule[] = [
+    {
+      targetFileToCheck: /^samples\/snippets\/requirements.txt$/,
+      // This would match: fix(deps): update dependency @octokit to v1
+      dependencyTitle: new RegExp(
+        /^(fix|chore)\(deps\): update dependency (@?\S*) to v(\S*)$/
+      ),
+      // This would match: '-google-cloud-storage==1.39.0
+      oldVersion: new RegExp(/[\s]-(@?[^=0-9]*)==([0-9])*\.([0-9]*\.[0-9]*)/),
+      // This would match: '+google-cloud-storage==1.40.0
+      newVersion: new RegExp(/[\s]\+(@?[^=0-9]*)==([0-9])*\.([0-9]*\.[0-9]*)/),
+    },
+  ];
 
-  constructor(
-    incomingPrAuthor: string,
-    incomingTitle: string,
-    incomingFileCount: number,
-    incomingChangedFiles: File[],
-    incomingRepoName: string,
-    incomingRepoOwner: string,
-    incomingPrNumber: number,
-    incomingOctokit: Octokit,
-    incomingBody?: string
-  ) {
-    super(
-      incomingPrAuthor,
-      incomingTitle,
-      incomingFileCount,
-      incomingChangedFiles,
-      incomingRepoName,
-      incomingRepoOwner,
-      incomingPrNumber,
-      incomingOctokit,
-      incomingBody
-    ),
-      (this.classRule = {
-        author: 'renovate-bot',
-        titleRegex:
-          /^(fix|chore)\(deps\): update dependency (@?\S*) to v(\S*)$/,
-        maxFiles: 3,
-        fileNameRegex: [/requirements.txt$/],
-        fileRules: [
-          {
-            targetFileToCheck: /^samples\/snippets\/requirements.txt$/,
-            // This would match: fix(deps): update dependency @octokit to v1
-            dependencyTitle: new RegExp(
-              /^(fix|chore)\(deps\): update dependency (@?\S*) to v(\S*)$/
-            ),
-            // This would match: '-google-cloud-storage==1.39.0
-            oldVersion: new RegExp(
-              /[\s]-(@?[^=0-9]*)==([0-9])*\.([0-9]*\.[0-9]*)/
-            ),
-            // This would match: '+google-cloud-storage==1.40.0
-            newVersion: new RegExp(
-              /[\s]\+(@?[^=0-9]*)==([0-9])*\.([0-9]*\.[0-9]*)/
-            ),
-          },
-        ],
-      });
+  constructor(octokit: Octokit) {
+    super(octokit);
+    this.rules.concat(
+      new TitleCheck(
+        /^(fix|chore)\(deps\): update dependency (@?\S*) to v(\S*)$/
+      )
+    );
+    this.rules.concat(new AuthorCheck('renovate-bot'));
+    this.rules.concat(new MaxFilesCheck(3));
+    this.rules.concat(new AllowedFilesCheck(/requirements.txt$/));
   }
 
-  public async checkPR(): Promise<boolean> {
-    const authorshipMatches = checkAuthor(
-      this.classRule.author,
-      this.incomingPR.author
-    );
-
-    const titleMatches = checkTitleOrBody(
-      this.incomingPR.title,
-      this.classRule.titleRegex
-    );
-
-    const fileCountMatch = checkFileCount(
-      this.incomingPR.fileCount,
-      this.classRule.maxFiles
-    );
-
-    const filePatternsMatch = checkFilePathsMatch(
-      this.incomingPR.changedFiles.map(x => x.filename),
-      this.classRule.fileNameRegex
-    );
-
-    for (const file of this.incomingPR.changedFiles) {
-      const fileMatch = this.classRule.fileRules?.find((x: FileRule) =>
+  public async additionalChecks(
+    incomingPR: PullRequest
+  ): Promise<CheckResult[]> {
+    const checkResults: CheckResult[] = [];
+    for (const file of incomingPR.changedFiles) {
+      const fileMatch = this.fileRules.find((x: FileRule) =>
         x.targetFileToCheck.test(file.filename)
       );
 
       if (!fileMatch) {
-        return false;
+        continue;
       }
 
       const versions = getVersionsV2(
@@ -125,47 +73,32 @@ export class PythonDependency extends Process implements LanguageRule {
       );
 
       if (!versions) {
-        return false;
+        continue;
       }
 
-      const doesDependencyMatch = doesDependencyChangeMatchPRTitleV2(
-        versions,
-        // We can assert this exists since we're in the class rule that contains it
-        fileMatch.dependencyTitle!,
-        this.incomingPR.title
-      );
+      checkResults.concat({
+        name: 'doesDependencyMatch',
+        status: doesDependencyChangeMatchPRTitleV2(
+          versions,
+          // We can assert this exists since we're in the class rule that contains it
+          fileMatch.dependencyTitle!,
+          incomingPR.title
+        ),
+        scope: file.filename,
+      });
 
-      const isVersionValid = runVersioningValidation(versions);
+      checkResults.concat({
+        name: 'isVersionValid',
+        status: runVersioningValidation(versions),
+        scope: file.filename,
+      });
 
-      const oneDependencyChanged = isOneDependencyChanged(file);
-
-      if (!(doesDependencyMatch && isVersionValid && oneDependencyChanged)) {
-        reportIndividualChecks(
-          ['doesDependencyMatch', 'isVersionValid', 'oneDependencyChanged'],
-          [doesDependencyMatch, isVersionValid, oneDependencyChanged],
-          this.incomingPR.repoOwner,
-          this.incomingPR.repoName,
-          this.incomingPR.prNumber,
-          file.filename
-        );
-        return false;
-      }
+      checkResults.concat({
+        name: 'oneDependencyChanged',
+        status: isOneDependencyChanged(file),
+        scope: file.filename,
+      });
     }
-
-    reportIndividualChecks(
-      [
-        'authorshipMatches',
-        'titleMatches',
-        'fileCountMatches',
-        'filePatternsMatch',
-      ],
-      [authorshipMatches, titleMatches, fileCountMatch, filePatternsMatch],
-      this.incomingPR.repoOwner,
-      this.incomingPR.repoName,
-      this.incomingPR.prNumber
-    );
-    return (
-      authorshipMatches && titleMatches && fileCountMatch && filePatternsMatch
-    );
+    return checkResults;
   }
 }

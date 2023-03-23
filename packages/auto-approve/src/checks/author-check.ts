@@ -1,4 +1,4 @@
-// Copyright 2022 Google LLC
+// Copyright 2023 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,15 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {Octokit} from '@octokit/rest';
-import { BaseLanguageRule } from '../base';
-import { TitleCheck } from '../../checks/title-check';
-import { AuthorCheck } from '../../checks/author-check';
+import {CheckRule, PullRequest, CheckResult} from '../interfaces';
 
-export class JavaApiaryCodegen extends BaseLanguageRule {
-  constructor(octokit: Octokit) {
-    super(octokit);
-    this.rules.unshift(new TitleCheck(/^(chore:\s)?[Rr]egenerate .* client$/));
-    this.rules.unshift(new AuthorCheck('yoshi-code-bot'));
+export class AuthorCheck implements CheckRule {
+  readonly allowedAuthors: string[];
+  constructor(...allowedAuthors: string[]) {
+    this.allowedAuthors = allowedAuthors;
+  }
+
+  async checkPR(pullRequest: PullRequest): Promise<CheckResult[]> {
+    const foundAuthor = this.allowedAuthors.find(
+      author => author === pullRequest.author
+    );
+    return [
+      {
+        name: 'authorshipMatches',
+        status: !!foundAuthor,
+      },
+    ];
   }
 }
