@@ -13,8 +13,8 @@
 // limitations under the License.
 
 import {CheckRule, PullRequest, CheckResult} from '../interfaces';
-import { Octokit } from '@octokit/rest';
-import { getFileContent } from '../get-pr-info';
+import {Octokit} from '@octokit/rest';
+import {getFileContent} from '../get-pr-info';
 
 export class LibraryTypeCheck implements CheckRule {
   private octokit: Octokit;
@@ -25,7 +25,6 @@ export class LibraryTypeCheck implements CheckRule {
   }
 
   async checkPR(pullRequest: PullRequest): Promise<CheckResult[]> {
-
     const fileContent = await getFileContent(
       pullRequest.repoOwner,
       pullRequest.repoName,

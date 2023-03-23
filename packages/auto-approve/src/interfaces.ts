@@ -151,14 +151,12 @@ export interface CheckResult {
   scope?: string;
 }
 export interface CheckRule {
-  checkPR(pullRequest: PullRequest): Promise<CheckResult[]>
+  checkPR(pullRequest: PullRequest): Promise<CheckResult[]>;
 }
 export abstract class Process {
   octokit: Octokit;
 
-  constructor(
-    octokit: Octokit
-  ) {
+  constructor(octokit: Octokit) {
     this.octokit = octokit;
   }
 }

@@ -17,7 +17,7 @@ import {CheckRule, PullRequest, CheckResult} from '../interfaces';
 export class TitleCheck implements CheckRule {
   readonly regex: RegExp;
   readonly inverse: boolean;
-  constructor(regex: RegExp, inverse: boolean = false) {
+  constructor(regex: RegExp, inverse = false) {
     this.regex = regex;
     this.inverse = inverse;
   }

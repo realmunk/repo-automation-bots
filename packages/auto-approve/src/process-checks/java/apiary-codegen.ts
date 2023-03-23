@@ -13,9 +13,9 @@
 // limitations under the License.
 
 import {Octokit} from '@octokit/rest';
-import { BaseLanguageRule } from '../base';
-import { TitleCheck } from '../../checks/title-check';
-import { AuthorCheck } from '../../checks/author-check';
+import {BaseLanguageRule} from '../base';
+import {TitleCheck} from '../../checks/title-check';
+import {AuthorCheck} from '../../checks/author-check';
 
 export class JavaApiaryCodegen extends BaseLanguageRule {
   constructor(octokit: Octokit) {

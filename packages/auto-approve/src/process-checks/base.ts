@@ -13,24 +13,20 @@
 // limitations under the License.
 
 import {Octokit} from '@octokit/rest';
-import { LanguageRule, CheckRule, PullRequest, CheckResult } from "../interfaces";
-import { GCFLogger, logger as defaultLogger } from 'gcf-utils';
+import {LanguageRule, CheckRule, PullRequest, CheckResult} from '../interfaces';
+import {GCFLogger, logger as defaultLogger} from 'gcf-utils';
 
 export class BaseLanguageRule implements LanguageRule {
   octokit: Octokit;
   logger: GCFLogger;
-  protected rules: CheckRule[] =[]
+  protected rules: CheckRule[] = [];
 
-  constructor(
-    octokit: Octokit,
-    logger: GCFLogger = defaultLogger
-  ) {
+  constructor(octokit: Octokit, logger: GCFLogger = defaultLogger) {
     this.octokit = octokit;
     this.logger = logger;
   }
 
   async checkPR(pullRequest: PullRequest): Promise<boolean> {
-    const {repoOwner, repoName, prNumber} = pullRequest;
     const checkResults: CheckResult[] = [];
     for (const rule of this.rules) {
       checkResults.concat(...(await rule.checkPR(pullRequest)));
@@ -42,7 +38,7 @@ export class BaseLanguageRule implements LanguageRule {
       return false;
     }
 
-    let valid = true;
+    const valid = true;
     for (const checkResult of checkResults) {
       this.logger.info(`${checkResult.status}: ${checkResult.name}`);
       valid && checkResult.status;
