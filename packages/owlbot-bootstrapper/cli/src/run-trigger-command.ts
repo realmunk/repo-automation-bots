@@ -29,6 +29,7 @@ export interface CliArgs {
   interContainerVarsPath?: string;
   skipIssueOnFailure: boolean;
   sourceCl: number;
+  branch: string;
 }
 
 const languageContainers = [
@@ -118,6 +119,11 @@ export const runTriggerCommand: yargs.CommandModule<{}, CliArgs> = {
         describe: 'source CL for tracking',
         type: 'number',
         demand: true,
+      })
+      .option('branch', {
+        describe: 'branch of repo with cloudbuild config',
+        type: 'string',
+        default: 'main',
       });
   },
   async handler(argv) {
@@ -125,6 +131,7 @@ export const runTriggerCommand: yargs.CommandModule<{}, CliArgs> = {
       projectId: argv.projectId,
       commonContainer: argv.container,
       triggerId: argv.triggerId,
+      branch: argv.branch,
     });
     const languageValues = getLanguageSpecificValues(argv.language);
     const bootstrapRequest: BootstrapRequest = {

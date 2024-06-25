@@ -34,6 +34,7 @@ export interface BootstrapperOptions {
   projectId: string;
   triggerId?: string;
   commonContainer?: string;
+  branch?: string;
 }
 
 interface BootstrapOptions {
@@ -49,11 +50,13 @@ export class Bootstrapper {
   private triggerId: string;
   private commonContainer: string;
   private workspaceDir: string;
+  private branch: string;
 
   constructor(options: BootstrapperOptions) {
     this.projectId = options.projectId;
     this.triggerId = options.triggerId ?? DEFAULT_TRIGGER_ID;
     this.commonContainer = options.commonContainer ?? DEFAULT_COMMON_CONTAINER;
+    this.branch = options.branch ?? 'main';
     this.workspaceDir = '/workspace';
   }
 
@@ -70,7 +73,7 @@ export class Bootstrapper {
       triggerId: this.triggerId,
       source: {
         projectId: this.projectId,
-        branchName: 'main',
+        branchName: this.branch,
         substitutions: {
           _API_ID: request.apiId,
           _REPO_TO_CLONE: request.destinationRepository.gitUri,

@@ -102,6 +102,6 @@ steps:
 
 artifacts:
   objects:
-    location: owlbot-bootstrap-chingor-artifacts
+    location: gs://owlbot-bootstrap-chingor-artifacts
     paths:
       - /workspace/bootstrap-metadata.json
