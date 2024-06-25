@@ -100,3 +100,8 @@ steps:
     - "--sourceCl"
     - "$_SOURCE_CL"
 
+artifacts:
+  objects:
+    location: owlbot-bootstrap-chingor-artifacts
+    paths:
+      - /workspace/bootstrap-metadata.json

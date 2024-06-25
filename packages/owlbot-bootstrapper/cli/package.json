@@ -4,9 +4,9 @@
   "description": "Bootstraps the initial files on new APIs to generate libraries",
   "private": true,
   "author": "Google LLC.",
-  "main": "./build/cli.js",
+  "main": "./build/src/index.js",
   "bin": {
-    "bootstrapper": "./build/cli.js"
+    "bootstrapper": "./build/src/cli.js"
   },
   "license": "Apache-2.0",
   "repository": "https://github.com/googleapis/repo-automation-bots.git",

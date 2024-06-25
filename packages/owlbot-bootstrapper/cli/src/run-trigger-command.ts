@@ -13,27 +13,22 @@
 // limitations under the License.
 
 import yargs from 'yargs';
-import {runTrigger} from './run-trigger';
-import {CloudBuildClient} from '@google-cloud/cloudbuild';
+import {Bootstrapper, BootstrapRequest} from './bootstrapper';
+import {parseRepository} from './repository';
 export interface CliArgs {
   projectId: string;
   triggerId: string;
   apiId: string;
   repoToClone?: string;
   language: string;
-  installationId: string;
+  installationId: number;
   container?: string;
   languageContainer?: string;
   monoRepoDir?: string;
-  serviceConfigPath?: string;
+  serviceConfigPath: string;
   interContainerVarsPath?: string;
   skipIssueOnFailure: boolean;
   sourceCl: number;
-}
-
-export interface MonoRepo {
-  owner: string;
-  repo: string;
 }
 
 const languageContainers = [
@@ -52,18 +47,6 @@ export function getLanguageSpecificValues(language: string) {
     }
   }
   throw new Error('No language-specific container specified');
-}
-
-export function parseRepoNameAndOrg(repoToClone: string | undefined): MonoRepo {
-  // find the repo name from git@github.com/googleapis/google-cloud-node.git
-  const repoName = repoToClone?.match(/git@github.com[/|:](.*?)\/(.*?).git/);
-  if (!repoName) {
-    throw new Error(
-      "Repo to clone arg is malformed; should be in form of ssh address,' git@github.com:googleapis/google-cloud-node.git'"
-    );
-  }
-
-  return {owner: repoName[1], repo: repoName[2]};
 }
 
 export const runTriggerCommand: yargs.CommandModule<{}, CliArgs> = {
@@ -98,8 +81,8 @@ export const runTriggerCommand: yargs.CommandModule<{}, CliArgs> = {
       })
       .option('installationId', {
         describe: 'Github app installation ID',
-        type: 'string',
-        default: '25330619',
+        type: 'number',
+        default: 25330619,
       })
       .option('container', {
         describe: 'common container image',
@@ -119,7 +102,7 @@ export const runTriggerCommand: yargs.CommandModule<{}, CliArgs> = {
       .option('serviceConfigPath', {
         describe: 'path to save the service config file',
         type: 'string',
-        demand: false,
+        default: 'serviceConfig.yaml',
       })
       .option('interContainerVarsPath', {
         describe: 'path to save the inter container variables',
@@ -138,17 +121,29 @@ export const runTriggerCommand: yargs.CommandModule<{}, CliArgs> = {
       });
   },
   async handler(argv) {
-    const cb = new CloudBuildClient({
+    const bootstrapper = new Bootstrapper({
       projectId: argv.projectId,
-      fallback: 'rest',
+      commonContainer: argv.container,
+      triggerId: argv.triggerId,
     });
-    let languageValues;
-    if (!argv.languageContainer) {
-      languageValues = getLanguageSpecificValues(argv.language);
-    }
-    const monoRepo = parseRepoNameAndOrg(
-      argv.repoToClone ?? languageValues?.repoToClone
-    );
-    await runTrigger(argv, cb, monoRepo, languageValues);
+    const languageValues = getLanguageSpecificValues(argv.language);
+    const bootstrapRequest: BootstrapRequest = {
+      apiId: argv.apiId,
+      language: argv.language,
+      languageContainer:
+        argv.languageContainer ??
+        languageValues.languageContainerInArtifactRegistry,
+      destinationRepository: parseRepository(
+        argv.repoToClone ?? languageValues.repoToClone
+      ),
+      installationId: argv.installationId,
+      sourceCl: argv.sourceCl,
+      serviceConfigPath: argv.serviceConfigPath,
+    };
+    const metadata = await bootstrapper.bootstrapLibrary(bootstrapRequest, {
+      skipIssueOnFailure: argv.skipIssueOnFailure,
+    });
+    console.log(`Check build log at ${metadata.logsUrl}`);
+    console.log(`Opened bootstrap request at ${metadata.bootstrapUrl}`);
   },
 };

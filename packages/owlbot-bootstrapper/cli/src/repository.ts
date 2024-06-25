@@ -1,4 +1,4 @@
-// Copyright 2022 Google LLC
+// Copyright 2024 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,9 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//TODO: Uncomment this when it is wired up
-// import {GCFBootstrapper} from 'gcf-utils';
-// import appFn from './owlbot-bootstrapper';
+export interface Repository {
+  gitUri: string;
+  owner: string;
+  repo: string;
+}
 
-// const bootstrap = new GCFBootstrapper();
-// module.exports['owlbot_bootstrapper'] = bootstrap.gcf(appFn);
+export function parseRepository(gitUri: string): Repository {
+  // find the repo name from git@github.com/googleapis/google-cloud-node.git
+  const repoName = gitUri.match(/git@github.com[/|:](.*?)\/(.*?).git/);
+  if (!repoName) {
+    throw new Error(
+      "Repo to clone arg is malformed; should be in form of ssh address,' git@github.com:googleapis/google-cloud-node.git'"
+    );
+  }
+
+  return {gitUri, owner: repoName[1], repo: repoName[2]};
+}
