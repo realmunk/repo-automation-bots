@@ -34,6 +34,8 @@ steps:
       - "--no-gen2"
       - "--service-account"
       - "canary-bot-frontend@repo-automation-bots.iam.gserviceaccount.com"
+      - "--set-env-vars"
+      - "PROJECT_ID=repo-automation-bots,GCF_LOCATION=us-central1,GCF_SHORT_FUNCTION_NAME=canary_bot"
       - "--trigger-http"
       - "--region"
       - "$_REGION"
