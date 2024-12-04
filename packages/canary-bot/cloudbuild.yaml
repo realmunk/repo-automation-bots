@@ -110,5 +110,6 @@ steps:
       - "$_REGION"
       - "--quiet"
 
+logsBucket: 'gs://canary-bot-deploy-logs'
 options:
-  logging: CLOUD_LOGGING_ONLY
+  logging: GCS_ONLY
