@@ -109,3 +109,6 @@ steps:
       - "--region"
       - "$_REGION"
       - "--quiet"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
