@@ -13,29 +13,29 @@
 # limitations under the License.
 
 steps:
-  - name: gcr.io/cloud-builders/npm
-    id: "build"
-    waitFor: ["-"]
-    entrypoint: bash
-    args:
-      - "-e"
-      - "./scripts/build-function.sh"
-      - "$_DIRECTORY"
+  # - name: gcr.io/cloud-builders/npm
+  #   id: "build"
+  #   waitFor: ["-"]
+  #   entrypoint: bash
+  #   args:
+  #     - "-e"
+  #     - "./scripts/build-function.sh"
+  #     - "$_DIRECTORY"
 
-  - name: gcr.io/cloud-builders/gcloud
-    id: "publish-function"
-    waitFor: ["build"]
-    entrypoint: gcloud
-    dir: "targets/canary-bot"
-    args:
-      - "functions"
-      - "deploy"
-      - "canary_bot"
-      - "--trigger-http"
-      - "--region"
-      - "$_REGION"
-      - "--runtime"
-      - "nodejs18"
+  # - name: gcr.io/cloud-builders/gcloud
+  #   id: "publish-function"
+  #   waitFor: ["build"]
+  #   entrypoint: gcloud
+  #   dir: "targets/canary-bot"
+  #   args:
+  #     - "functions"
+  #     - "deploy"
+  #     - "canary_bot"
+  #     - "--trigger-http"
+  #     - "--region"
+  #     - "$_REGION"
+  #     - "--runtime"
+  #     - "nodejs18"
 
   - name: gcr.io/cloud-builders/docker
     id: "build-docker"
