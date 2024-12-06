@@ -111,5 +111,5 @@ steps:
       - "--quiet"
 
 logsBucket: 'gs://canary-bot-deploy-logs'
-# options:
-#   logging: CLOUD_LOGGING_ONLY
+options:
+  logging: GCS_ONLY
